@@ -129,6 +129,27 @@ export const adminPage = `<!DOCTYPE html>
             <h1>Link Management</h1>
             <button onclick="logout()">Logout</button>
         </div>
+        
+        <!-- Create Link Section -->
+        <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
+            <h3 style="margin-top: 0;">Create New Link</h3>
+            <form id="adminCreateForm" style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 0.5rem; align-items: end;">
+                <div>
+                    <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Target URL</label>
+                    <input type="url" name="url" required placeholder="https://example.com" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Slug (Optional)</label>
+                    <input type="text" name="slug" placeholder="custom-slug" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Expires At</label>
+                    <input type="datetime-local" name="expires" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
+                </div>
+                <button type="submit" style="background: #000; color: white; padding: 0.5rem 1rem; height: 38px;">Create</button>
+            </form>
+        </div>
+
         <div id="error-msg" style="color: red; margin-bottom: 1rem;"></div>
         <div class="controls">
             <input type="text" id="search" placeholder="Search slug..." style="padding: 0.5rem;">
@@ -140,6 +161,7 @@ export const adminPage = `<!DOCTYPE html>
                     <th>Slug</th>
                     <th>Target</th>
                     <th>Visits</th>
+                    <th>Expires</th>
                     <th>Status</th>
                     <th>Jump Page</th>
                     <th>Actions</th>
@@ -170,6 +192,25 @@ export const adminPage = `<!DOCTYPE html>
             document.getElementById('login-overlay').style.display = 'none';
             loadLinks();
         });
+        
+        document.getElementById('adminCreateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            try {
+                const res = await apiCall('/api/admin/create', 'POST', data);
+                if (res.success) {
+                    alert('Link created: ' + res.slug);
+                    e.target.reset();
+                    loadLinks();
+                } else {
+                    alert('Error: ' + res.error);
+                }
+            } catch (err) {
+                alert('Failed: ' + err.message);
+            }
+        });
 
         function logout() {
             localStorage.removeItem('admin_token');
@@ -193,6 +234,11 @@ export const adminPage = `<!DOCTYPE html>
             return res.json();
         }
 
+        function formatDate(ts) {
+            if (!ts) return 'Never';
+            return new Date(ts).toLocaleString();
+        }
+
         async function loadLinks() {
             try {
                 const search = document.getElementById('search').value;
@@ -206,6 +252,7 @@ export const adminPage = `<!DOCTYPE html>
                         <td><a href="/\${link.slug}" target="_blank">\${link.slug}</a></td>
                         <td title="\${link.url}" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\${link.url}</td>
                         <td>\${link.visit_count}</td>
+                        <td>\${formatDate(link.expires_at)}</td>
                         <td><span class="status-\${link.status}">\${link.status}</span></td>
                         <td>\${link.interstitial ? 'Yes' : 'No'}</td>
                         <td>

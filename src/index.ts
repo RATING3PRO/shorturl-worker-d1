@@ -121,6 +121,56 @@ app.use('/api/admin/*', async (c, next) => {
     await next();
 });
 
+// API: Admin Create Link
+app.post('/api/admin/create', async (c) => {
+    const body = await c.req.json();
+    const { url, slug, expires } = body;
+    const ip = c.req.header('CF-Connecting-IP') || '127.0.0.1';
+
+    if (!url) return c.json({ error: 'URL required' }, 400);
+
+    // Validate URL format
+    try {
+        new URL(url);
+    } catch {
+        return c.json({ error: 'Invalid URL format' }, 400);
+    }
+
+    // Slug logic
+    let finalSlug = slug;
+    if (!finalSlug) {
+        // Generate random 6-char slug
+        finalSlug = Math.random().toString(36).substring(2, 8);
+    } else {
+        // Validate slug chars
+        if (!/^[a-zA-Z0-9-_]+$/.test(finalSlug)) {
+            return c.json({ error: 'Invalid slug characters' }, 400);
+        }
+    }
+
+    // Check if exists
+    const existing = await c.env.DB.prepare('SELECT slug FROM links WHERE slug = ?').bind(finalSlug).first();
+    if (existing) {
+        return c.json({ error: 'Slug already taken' }, 409);
+    }
+
+    const now = Date.now();
+    let expiresAt = null;
+    if (expires) {
+        expiresAt = new Date(expires).getTime();
+        // Admin can create expired links if they really want to, but let's warn or block? 
+        // Standard behavior: allow setting past dates but it won't work. 
+        // Or enforce future date. Let's enforce future date for consistency.
+        if (expiresAt < now) return c.json({ error: 'Expiration must be in future' }, 400);
+    }
+
+    await c.env.DB.prepare(
+        'INSERT INTO links (slug, url, created_at, expires_at, status, interstitial, visit_count, creator_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(finalSlug, url, now, expiresAt, 'active', 0, 0, ip).run();
+
+    return c.json({ success: true, slug: finalSlug });
+});
+
 app.get('/api/admin/links', async (c) => {
     const page = parseInt(c.req.query('page') || '1');
     const search = c.req.query('search') || '';
