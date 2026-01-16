@@ -6,7 +6,7 @@ A serverless URL shortener built with Cloudflare Workers, Hono, and D1 Database.
 
 - **Shorten Links**: Public interface at `/c`.
 - **Admin Dashboard**: Secure management interface at `/a`.
-- **Link Management**: Pause, Disable, Delete links.
+- **Link Management**: Create, Pause, Disable, Delete links.
 - **Interstitial Page**: Optional "You are being redirected" page with 5s countdown (configurable per link).
 - **Analytics**: Tracks visit counts.
 - **Security**: 
@@ -16,47 +16,37 @@ A serverless URL shortener built with Cloudflare Workers, Hono, and D1 Database.
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) installed.
+- [Node.js](https://nodejs.org/) installed (for building).
 - [Cloudflare Account](https://dash.cloudflare.com/).
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) installed (`npm install -g wrangler`).
 
 ## Setup & Deployment
 
-### 1. Install Dependencies
+### 1. Build Project
+
+First, install dependencies and build the project locally:
 
 ```bash
 npm install
+npm run deploy
 ```
 
-### 2. Create & Bind D1 Database
+> Note: `npm run deploy` will use Wrangler to deploy your worker. You will be prompted to login to Cloudflare if not already logged in.
 
-1.  **Create D1 Database**:
-    You can create a D1 database in the Cloudflare Dashboard or via CLI:
-    ```bash
-    npx wrangler d1 create shorturl-db
-    ```
-    Note the `database_id` if using CLI.
+### 2. Configure D1 Database (Cloudflare Dashboard)
 
-2.  **Bind in Dashboard**:
-    - Go to your Worker in Cloudflare Dashboard.
-    - Navigate to **Settings** -> **Functions** -> **D1 Database Bindings**.
-    - Add a new binding:
-        - **Variable name**: `DB`
-        - **D1 Database**: Select the database you created (`shorturl-db`).
-    - **Deploy** the worker to make changes take effect.
+1.  Log in to **Cloudflare Dashboard** -> **Workers & Pages** -> **D1**.
+2.  Click **Create Database** and name it `shorturl-db`.
+3.  Go to your **Worker** -> **Settings** -> **Functions** -> **D1 Database Bindings**.
+4.  Add a new binding:
+    - **Variable name**: `DB`
+    - **D1 Database**: Select the `shorturl-db` you just created.
+5.  **Redeploy** the worker (go to **Deployments** tab -> **Deploy** or just wait for next deployment).
 
-### 3. Initialize Database Schema
+### 3. Initialize Database Schema (Cloudflare Dashboard)
 
-You need to execute the SQL commands in `schema.sql` to create the table. You can do this in the Cloudflare Dashboard:
-
-1.  Open your D1 database in the Cloudflare Dashboard.
+1.  Open your D1 database `shorturl-db` in the Cloudflare Dashboard.
 2.  Go to the **Console** tab.
-3.  Copy the contents of `schema.sql` and paste it into the console query editor.
-4.  Click **Execute**.
-
-**Schema Content:**
-
-Please execute the following SQL. If you encounter errors, try running the `CREATE TABLE` block first, and then the `CREATE INDEX` command.
+3.  Copy and paste the following SQL to create the table:
 
 ```sql
 DROP TABLE IF EXISTS links;
@@ -70,48 +60,30 @@ CREATE TABLE links (
     visit_count INTEGER DEFAULT 0,
     creator_ip TEXT
 );
+```
+
+4.  Click **Execute**.
+5.  Then paste and execute this index creation command:
+
+```sql
 CREATE INDEX IF NOT EXISTS idx_expires_at ON links(expires_at);
 ```
 
-### 4. Configure Variables & Secrets
+### 4. Configure Variables & Secrets (Cloudflare Dashboard)
 
-All configuration should be done in Cloudflare Dashboard -> Settings -> Variables (or via `wrangler secret put`).
+Go to your **Worker** -> **Settings** -> **Variables**.
 
-**Required Secrets:**
+**Environment Variables** (Click "Add variable"):
+- `ROOT_REDIRECT`: Target URL for root path `/` (e.g., `https://example.com`).
+- `FALLBACK_URL`: Target URL for 404s (e.g., `https://example.com/404`).
+- `TURNSTILE_SITE_KEY`: Your Turnstile Site Key (required for `/c` page).
+
+**Secrets** (Click "Add variable" -> "Encrypt"):
 - `ADMIN_PASSWORD`: Password for accessing `/a`.
-- `TURNSTILE_SECRET_KEY`: Secret key from Cloudflare Turnstile.
-
-**Recommended Variables:**
-- `ROOT_REDIRECT`: Where to redirect users who visit the root `/` (e.g., `https://example.com`).
-- `FALLBACK_URL`: Where to redirect if a short link is not found (e.g., `https://example.com/404`).
-- `TURNSTILE_SITE_KEY`: The Site Key for Turnstile (required for public creation page).
-
-```bash
-# Example of setting secrets via CLI
-npx wrangler secret put ADMIN_PASSWORD
-npx wrangler secret put TURNSTILE_SECRET_KEY
-
-# Example of setting variables via CLI (or use Dashboard)
-npx wrangler deploy --var ROOT_REDIRECT:https://mysite.com --var FALLBACK_URL:https://mysite.com/404
-```
-
-### 5. Deploy
-
-```bash
-npx wrangler deploy
-```
+- `TURNSTILE_SECRET_KEY`: Your Turnstile Secret Key.
 
 ## Usage
 
 - **Public Creation**: Visit `https://your-worker.workers.dev/c`
 - **Admin Panel**: Visit `https://your-worker.workers.dev/a`
-  - Enter the password you set in step 4.
 - **Redirect**: Visit `https://your-worker.workers.dev/slug`
-
-## Local Development
-
-```bash
-npm run dev
-```
-
-Note: Local dev uses a local D1 SQLite file.
