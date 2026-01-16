@@ -73,6 +73,10 @@ app.post('/api/create', async (c) => {
 
     if (!url) return c.json({ error: 'URL required' }, 400);
 
+    if (url.length > 1000) {
+        return c.json({ error: 'URL too long (max 1000 chars)' }, 400);
+    }
+
     // Validate URL format
     try {
         new URL(url);
@@ -86,6 +90,7 @@ app.post('/api/create', async (c) => {
         // Generate random 6-char slug
         finalSlug = Math.random().toString(36).substring(2, 8);
     } else {
+        // Admin overrides: allow short slugs, but still validate chars
         // Validate slug chars
         if (!/^[a-zA-Z0-9-_]+$/.test(finalSlug)) {
             return c.json({ error: 'Invalid slug characters' }, 400);
@@ -129,6 +134,10 @@ app.post('/api/admin/create', async (c) => {
 
     if (!url) return c.json({ error: 'URL required' }, 400);
 
+    if (url.length > 1000) {
+        return c.json({ error: 'URL too long (max 1000 chars)' }, 400);
+    }
+
     // Validate URL format
     try {
         new URL(url);
@@ -142,6 +151,7 @@ app.post('/api/admin/create', async (c) => {
         // Generate random 6-char slug
         finalSlug = Math.random().toString(36).substring(2, 8);
     } else {
+        // Admin overrides: allow short slugs (no min length check)
         // Validate slug chars
         if (!/^[a-zA-Z0-9-_]+$/.test(finalSlug)) {
             return c.json({ error: 'Invalid slug characters' }, 400);

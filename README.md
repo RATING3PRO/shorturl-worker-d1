@@ -85,5 +85,9 @@ Go to your **Worker** -> **Settings** -> **Variables**.
 ## Usage
 
 - **Public Creation**: Visit `https://your-worker.workers.dev/c`
+  - URL Limit: Max 1000 characters.
+  - Custom Slug: Min 3 characters.
 - **Admin Panel**: Visit `https://your-worker.workers.dev/a`
+  - Login with `ADMIN_PASSWORD`.
+  - Admin can create short links with any slug length (e.g., 1 or 2 chars allowed).
 - **Redirect**: Visit `https://your-worker.workers.dev/slug`

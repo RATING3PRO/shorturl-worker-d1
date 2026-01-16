@@ -26,11 +26,11 @@ export const publicPage = `<!DOCTYPE html>
         <form id="createForm">
             <div class="form-group">
                 <label for="url">Target URL</label>
-                <input type="url" id="url" name="url" required placeholder="https://example.com/very/long/url">
+                <input type="url" id="url" name="url" required maxlength="1000" placeholder="https://example.com/very/long/url">
             </div>
             <div class="form-group">
                 <label for="slug">Custom Slug (Optional)</label>
-                <input type="text" id="slug" name="slug" placeholder="custom-name" pattern="[a-zA-Z0-9-_]+" title="Alphanumeric, dashes, and underscores only">
+                <input type="text" id="slug" name="slug" minlength="3" placeholder="custom-name" pattern="[a-zA-Z0-9-_]+" title="Alphanumeric, dashes, and underscores only">
             </div>
             <div class="form-group">
                 <label for="expires">Expires At (Optional)</label>
@@ -136,11 +136,11 @@ export const adminPage = `<!DOCTYPE html>
             <form id="adminCreateForm" style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 0.5rem; align-items: end;">
                 <div>
                     <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Target URL</label>
-                    <input type="url" name="url" required placeholder="https://example.com" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
+                    <input type="url" name="url" required maxlength="1000" placeholder="https://example.com" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
                 </div>
                 <div>
                     <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Slug (Optional)</label>
-                    <input type="text" name="slug" placeholder="custom-slug" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
+                    <input type="text" name="slug" minlength="3" placeholder="custom-slug" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
                 </div>
                 <div>
                     <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Expires At</label>
