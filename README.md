@@ -12,6 +12,10 @@ A serverless URL shortener built with Cloudflare Workers, Hono, and D1 Database.
 - **Security**: 
   - Cloudflare Turnstile integration for public creation.
   - Password-protected admin API.
+- **Notifications**: Telegram Bot notifications for:
+  - New link creation.
+  - Admin login.
+  - Link updates/deletions.
 - **Customization**: Custom slugs, expiration dates.
 
 ## Prerequisites
@@ -69,6 +73,18 @@ CREATE TABLE links (
 CREATE INDEX IF NOT EXISTS idx_expires_at ON links(expires_at);
 ```
 
+6.  **Create Config Table** (for Telegram notifications):
+
+```sql
+CREATE TABLE IF NOT EXISTS config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    tg_notify_create INTEGER DEFAULT 0,
+    tg_notify_login INTEGER DEFAULT 0,
+    tg_notify_update INTEGER DEFAULT 0
+);
+INSERT OR IGNORE INTO config (id, tg_notify_create, tg_notify_login, tg_notify_update) VALUES (1, 0, 0, 0);
+```
+
 ### 4. Configure Variables & Secrets (Cloudflare Dashboard)
 
 Go to your **Worker** -> **Settings** -> **Variables**.
@@ -77,10 +93,12 @@ Go to your **Worker** -> **Settings** -> **Variables**.
 - `ROOT_REDIRECT`: Target URL for root path `/` (e.g., `https://example.com`).
 - `FALLBACK_URL`: Target URL for 404s (e.g., `https://example.com/404`).
 - `TURNSTILE_SITE_KEY`: Your Turnstile Site Key (required for `/c` page).
+- `TG_CHAT_ID`: Telegram Chat ID to receive notifications (e.g., `123456789`).
 
 **Secrets** (Click "Add variable" -> "Encrypt"):
 - `ADMIN_PASSWORD`: Password for accessing `/a`.
 - `TURNSTILE_SECRET_KEY`: Your Turnstile Secret Key.
+- `TG_BOT_TOKEN`: Telegram Bot Token (e.g., `123456:ABC-DEF...`).
 
 ## Usage
 

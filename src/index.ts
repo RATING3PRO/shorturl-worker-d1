@@ -9,7 +9,9 @@ type Bindings = {
     ADMIN_PASSWORD: string;
     TURNSTILE_SECRET_KEY: string;
     // Optional: injected vars
-    TURNSTILE_SITE_KEY?: string; 
+    TURNSTILE_SITE_KEY?: string;
+    TG_BOT_TOKEN?: string;
+    TG_CHAT_ID?: string;
 };
 
 type Link = {
@@ -22,7 +24,49 @@ type Link = {
     visit_count: number;
 };
 
+type Config = {
+    tg_notify_create: number; // 0 or 1
+    tg_notify_login: number;
+    tg_notify_update: number;
+};
+
 const app = new Hono<{ Bindings: Bindings }>();
+
+// Helper: Telegram Notification
+async function sendTgMessage(env: Bindings, text: string) {
+    if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) return;
+    
+    // Check user config settings from DB
+    // Optimization: We could cache this, but for now we'll query DB or pass flags
+    // Actually, let's keep it simple: caller decides if they should send based on config
+    
+    try {
+        await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: env.TG_CHAT_ID,
+                text: text,
+                parse_mode: 'HTML'
+            })
+        });
+    } catch (e) {
+        console.error('Failed to send TG message', e);
+    }
+}
+
+// Helper: Get Config
+async function getConfig(db: D1Database): Promise<Config> {
+    // Ensure config table exists (lazy migration for existing deployments)
+    // For performance, we assume it exists or we handle error. 
+    // Ideally schema.sql handles this. But let's check or use default.
+    try {
+        const row = await db.prepare('SELECT * FROM config LIMIT 1').first<Config>();
+        if (row) return row;
+    } catch {}
+    
+    return { tg_notify_create: 0, tg_notify_login: 0, tg_notify_update: 0 };
+}
 
 // Helper: Turnstile Validation
 async function validateTurnstile(token: string, secret: string, ip: string) {
@@ -114,6 +158,14 @@ app.post('/api/create', async (c) => {
         'INSERT INTO links (slug, url, created_at, expires_at, status, interstitial, visit_count, creator_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(finalSlug, url, now, expiresAt, 'active', 0, 0, ip).run();
 
+    // TG Notify
+    c.executionCtx.waitUntil((async () => {
+        const conf = await getConfig(c.env.DB);
+        if (conf.tg_notify_create) {
+            await sendTgMessage(c.env, `<b>New Link Created</b>\nSlug: <code>${finalSlug}</code>\nURL: ${url}\nIP: ${ip}`);
+        }
+    })());
+
     return c.json({ success: true, slug: finalSlug });
 });
 
@@ -124,6 +176,38 @@ app.use('/api/admin/*', async (c, next) => {
         return c.json({ error: 'Unauthorized' }, 401);
     }
     await next();
+});
+
+// API: Get Config
+app.get('/api/admin/config', async (c) => {
+    const conf = await getConfig(c.env.DB);
+    const hasTg = !!(c.env.TG_BOT_TOKEN && c.env.TG_CHAT_ID);
+    return c.json({ ...conf, has_tg: hasTg });
+});
+
+// API: Update Config
+app.post('/api/admin/config', async (c) => {
+    const { tg_notify_create, tg_notify_login, tg_notify_update } = await c.req.json();
+    
+    // Check if TG is configured
+    if (!c.env.TG_BOT_TOKEN || !c.env.TG_CHAT_ID) {
+        return c.json({ error: 'Telegram secrets not configured' }, 400);
+    }
+
+    await c.env.DB.prepare(
+        'UPDATE config SET tg_notify_create = ?, tg_notify_login = ?, tg_notify_update = ? WHERE id = 1'
+    ).bind(tg_notify_create ? 1 : 0, tg_notify_login ? 1 : 0, tg_notify_update ? 1 : 0).run();
+    
+    return c.json({ success: true });
+});
+
+// API: Test TG
+app.post('/api/admin/test-tg', async (c) => {
+    if (!c.env.TG_BOT_TOKEN || !c.env.TG_CHAT_ID) {
+        return c.json({ error: 'Telegram secrets not configured' }, 400);
+    }
+    await sendTgMessage(c.env, '<b>Test Message</b>\nThis is a test notification from your Short URL Worker.');
+    return c.json({ success: true });
 });
 
 // API: Admin Create Link
@@ -178,6 +262,14 @@ app.post('/api/admin/create', async (c) => {
         'INSERT INTO links (slug, url, created_at, expires_at, status, interstitial, visit_count, creator_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(finalSlug, url, now, expiresAt, 'active', 0, 0, ip).run();
 
+    // TG Notify
+    c.executionCtx.waitUntil((async () => {
+        const conf = await getConfig(c.env.DB);
+        if (conf.tg_notify_create) {
+            await sendTgMessage(c.env, `<b>Admin Link Created</b>\nSlug: <code>${finalSlug}</code>\nURL: ${url}`);
+        }
+    })());
+
     return c.json({ success: true, slug: finalSlug });
 });
 
@@ -205,11 +297,24 @@ app.get('/api/admin/links', async (c) => {
 app.post('/api/admin/update', async (c) => {
     const { slug, status, interstitial } = await c.req.json();
     
+    let changes = [];
     if (status) {
         await c.env.DB.prepare('UPDATE links SET status = ? WHERE slug = ?').bind(status, slug).run();
+        changes.push(`Status: ${status}`);
     }
     if (typeof interstitial === 'boolean') {
         await c.env.DB.prepare('UPDATE links SET interstitial = ? WHERE slug = ?').bind(interstitial ? 1 : 0, slug).run();
+        changes.push(`Interstitial: ${interstitial}`);
+    }
+
+    // TG Notify
+    if (changes.length > 0) {
+        c.executionCtx.waitUntil((async () => {
+            const conf = await getConfig(c.env.DB);
+            if (conf.tg_notify_update) {
+                await sendTgMessage(c.env, `<b>Link Updated</b>\nSlug: <code>${slug}</code>\n${changes.join('\n')}`);
+            }
+        })());
     }
 
     return c.json({ success: true });

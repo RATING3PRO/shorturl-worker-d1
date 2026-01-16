@@ -127,9 +127,41 @@ export const adminPage = `<!DOCTYPE html>
     <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h1>Link Management</h1>
-            <button onclick="logout()">Logout</button>
+            <div>
+                <button onclick="toggleSettings()">⚙️ Settings</button>
+                <button onclick="logout()">Logout</button>
+            </div>
         </div>
         
+        <!-- Settings Modal/Section -->
+        <div id="settings-panel" style="display: none; margin-bottom: 1.5rem; padding: 1rem; background: #fff; border: 1px solid #e4e4e7; border-radius: 0.5rem;">
+            <h3 style="margin-top: 0;">Telegram Notifications</h3>
+            <div id="tg-not-configured" style="display: none; color: #d97706; margin-bottom: 1rem;">
+                ⚠️ Telegram Bot Token or Chat ID not configured in Secrets.
+            </div>
+            <div id="tg-configured" style="display: none;">
+                <div style="margin-bottom: 0.5rem;">
+                    <label>
+                        <input type="checkbox" id="tg_create"> Notify on New Link Creation
+                    </label>
+                </div>
+                <div style="margin-bottom: 0.5rem;">
+                    <label>
+                        <input type="checkbox" id="tg_login"> Notify on Admin Login
+                    </label>
+                </div>
+                <div style="margin-bottom: 0.5rem;">
+                    <label>
+                        <input type="checkbox" id="tg_update"> Notify on Link Update/Delete
+                    </label>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <button onclick="saveConfig()" style="background: #000; color: white;">Save Settings</button>
+                    <button onclick="testTg()">Send Test Message</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Create Link Section -->
         <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
             <h3 style="margin-top: 0;">Create New Link</h3>
@@ -183,6 +215,7 @@ export const adminPage = `<!DOCTYPE html>
         if (token) {
             document.getElementById('login-overlay').style.display = 'none';
             loadLinks();
+            loadConfig();
         }
 
         document.getElementById('loginForm').addEventListener('submit', (e) => {
@@ -191,6 +224,7 @@ export const adminPage = `<!DOCTYPE html>
             localStorage.setItem('admin_token', token);
             document.getElementById('login-overlay').style.display = 'none';
             loadLinks();
+            loadConfig();
         });
         
         document.getElementById('adminCreateForm').addEventListener('submit', async (e) => {
@@ -217,6 +251,11 @@ export const adminPage = `<!DOCTYPE html>
             location.reload();
         }
 
+        function toggleSettings() {
+            const el = document.getElementById('settings-panel');
+            el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        }
+
         async function apiCall(endpoint, method = 'GET', body = null) {
             const headers = { 'x-admin-auth': token };
             if (body) headers['Content-Type'] = 'application/json';
@@ -232,6 +271,47 @@ export const adminPage = `<!DOCTYPE html>
                 throw new Error('Unauthorized');
             }
             return res.json();
+        }
+
+        async function loadConfig() {
+            try {
+                const conf = await apiCall('/api/admin/config');
+                if (conf.has_tg) {
+                    document.getElementById('tg-configured').style.display = 'block';
+                    document.getElementById('tg_create').checked = !!conf.tg_notify_create;
+                    document.getElementById('tg_login').checked = !!conf.tg_notify_login;
+                    document.getElementById('tg_update').checked = !!conf.tg_notify_update;
+                } else {
+                    document.getElementById('tg-not-configured').style.display = 'block';
+                }
+            } catch (e) {
+                console.error('Failed to load config', e);
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                const data = {
+                    tg_notify_create: document.getElementById('tg_create').checked,
+                    tg_notify_login: document.getElementById('tg_login').checked,
+                    tg_notify_update: document.getElementById('tg_update').checked
+                };
+                const res = await apiCall('/api/admin/config', 'POST', data);
+                if (res.success) alert('Settings saved');
+                else alert('Error: ' + res.error);
+            } catch (e) {
+                alert('Failed: ' + e.message);
+            }
+        }
+
+        async function testTg() {
+            try {
+                const res = await apiCall('/api/admin/test-tg', 'POST', {});
+                if (res.success) alert('Test message sent!');
+                else alert('Error: ' + res.error);
+            } catch (e) {
+                alert('Failed: ' + e.message);
+            }
         }
 
         function formatDate(ts) {
