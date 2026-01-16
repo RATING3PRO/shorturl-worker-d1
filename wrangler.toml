@@ -1,0 +1,20 @@
+name = "shorturl-worker-d1"
+main = "src/index.ts"
+compatibility_date = "2025-01-09"
+
+# Variables
+# Please configure these in Cloudflare Dashboard -> Settings -> Variables
+# [vars]
+# ROOT_REDIRECT
+# FALLBACK_URL
+# ADMIN_PASSWORD
+# TURNSTILE_SECRET_KEY
+# TURNSTILE_SITE_KEY
+
+# D1 Database Binding
+# Please configure your D1 database binding in Cloudflare Dashboard -> Settings -> Functions -> D1 Database Bindings
+# Binding name should be: DB
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "shorturl-db"
+# database_id = "YOUR_DATABASE_ID_HERE"
