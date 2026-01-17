@@ -209,6 +209,16 @@ export const adminPage = `<!DOCTYPE html>
     </div>
 
     <script>
+        function escapeHtml(unsafe) {
+            if (unsafe === null || unsafe === undefined) return '';
+            return String(unsafe)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         let currentPage = 1;
         let token = localStorage.getItem('admin_token');
 
@@ -322,27 +332,31 @@ export const adminPage = `<!DOCTYPE html>
         async function loadLinks() {
             try {
                 const search = document.getElementById('search').value;
-                const data = await apiCall(\`/api/admin/links?page=\${currentPage}&search=\${search}\`);
+                const data = await apiCall(\`/api/admin/links?page=\${currentPage}&search=\${encodeURIComponent(search)}\`);
                 const tbody = document.getElementById('links-body');
                 tbody.innerHTML = '';
                 
                 data.links.forEach(link => {
                     const row = document.createElement('tr');
+                    const safeSlug = escapeHtml(link.slug);
+                    const safeUrl = escapeHtml(link.url);
+                    const safeStatus = escapeHtml(link.status);
+                    
                     row.innerHTML = \`
-                        <td><a href="/\${link.slug}" target="_blank">\${link.slug}</a></td>
-                        <td title="\${link.url}" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\${link.url}</td>
+                        <td><a href="/\${safeSlug}" target="_blank">\${safeSlug}</a></td>
+                        <td title="\${safeUrl}" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\${safeUrl}</td>
                         <td>\${link.visit_count}</td>
                         <td>\${formatDate(link.expires_at)}</td>
-                        <td><span class="status-\${link.status}">\${link.status}</span></td>
+                        <td><span class="status-\${safeStatus}">\${safeStatus}</span></td>
                         <td>\${link.interstitial ? 'Yes' : 'No'}</td>
                         <td>
-                            <button onclick="toggleStatus('\${link.slug}', '\${link.status}')">
+                            <button onclick="toggleStatus('\${safeSlug}', '\${safeStatus}')">
                                 \${link.status === 'active' ? 'Pause' : link.status === 'paused' ? 'Disable' : 'Activate'}
                             </button>
-                            <button onclick="toggleInterstitial('\${link.slug}', \${link.interstitial})">
+                            <button onclick="toggleInterstitial('\${safeSlug}', \${link.interstitial})">
                                 \${link.interstitial ? 'No Jump' : 'Jump'}
                             </button>
-                            <button class="btn-delete" onclick="deleteLink('\${link.slug}')">Delete</button>
+                            <button class="btn-delete" onclick="deleteLink('\${safeSlug}')">Delete</button>
                         </td>
                     \`;
                     tbody.appendChild(row);
@@ -377,7 +391,9 @@ export const adminPage = `<!DOCTYPE html>
 </body>
 </html>`;
 
-export const interstitialPage = (url: string) => `<!DOCTYPE html>
+export const interstitialPage = (url: string) => {
+    const safeUrl = url.replace(/"/g, '&quot;');
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -393,9 +409,9 @@ export const interstitialPage = (url: string) => `<!DOCTYPE html>
     <div class="card">
         <h1>You are being redirected</h1>
         <p>You are about to leave this site and visit:</p>
-        <p style="font-weight: bold; color: #059669;">${url}</p>
+        <p style="font-weight: bold; color: #059669; word-break: break-all;">${safeUrl}</p>
         <p id="timer">Redirecting in 5 seconds...</p>
-        <a href="${url}" class="btn">Go Now</a>
+        <a href="${safeUrl}" class="btn">Go Now</a>
     </div>
     <script>
         let count = 5;
@@ -405,12 +421,13 @@ export const interstitialPage = (url: string) => `<!DOCTYPE html>
             timer.textContent = 'Redirecting in ' + count + ' seconds...';
             if (count <= 0) {
                 clearInterval(interval);
-                window.location.href = "${url}";
+                window.location.href = "${safeUrl}";
             }
         }, 1000);
     </script>
 </body>
 </html>`;
+};
 
 export const maintenancePage = `<!DOCTYPE html>
 <html lang="en">

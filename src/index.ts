@@ -32,6 +32,15 @@ type Config = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+// Security Middleware
+app.use('*', async (c, next) => {
+    await next();
+    c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; frame-src https://challenges.cloudflare.com;");
+    c.header('X-Content-Type-Options', 'nosniff');
+    c.header('X-Frame-Options', 'DENY');
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+});
+
 // Helper: Telegram Notification
 async function sendTgMessage(env: Bindings, text: string) {
     if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) return;
@@ -123,7 +132,15 @@ app.post('/api/create', async (c) => {
 
     // Validate URL format
     try {
-        new URL(url);
+        const u = new URL(url);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+            return c.json({ error: 'Only http and https protocols are allowed' }, 400);
+        }
+        // Prevent self-redirection
+        const host = c.req.header('host');
+        if (host && u.host === host) {
+            return c.json({ error: 'Cannot redirect to self' }, 400);
+        }
     } catch {
         return c.json({ error: 'Invalid URL format' }, 400);
     }
@@ -224,7 +241,15 @@ app.post('/api/admin/create', async (c) => {
 
     // Validate URL format
     try {
-        new URL(url);
+        const u = new URL(url);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+            return c.json({ error: 'Only http and https protocols are allowed' }, 400);
+        }
+        // Prevent self-redirection
+        const host = c.req.header('host');
+        if (host && u.host === host) {
+            return c.json({ error: 'Cannot redirect to self' }, 400);
+        }
     } catch {
         return c.json({ error: 'Invalid URL format' }, 400);
     }
