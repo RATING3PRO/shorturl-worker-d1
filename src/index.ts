@@ -156,6 +156,10 @@ app.post('/api/create', async (c) => {
         if (!/^[a-zA-Z0-9-_]+$/.test(finalSlug)) {
             return c.json({ error: 'Invalid slug characters' }, 400);
         }
+        // Reserved slugs
+        if (finalSlug === 'a' || finalSlug === 'c') {
+            return c.json({ error: 'Reserved slug' }, 400);
+        }
     }
 
     // Check if exists
@@ -260,10 +264,14 @@ app.post('/api/admin/create', async (c) => {
         // Generate random 6-char slug
         finalSlug = Math.random().toString(36).substring(2, 8);
     } else {
-        // Admin overrides: allow short slugs (no min length check)
+        // Admin overrides: allow short slugs, but still validate chars
         // Validate slug chars
         if (!/^[a-zA-Z0-9-_]+$/.test(finalSlug)) {
             return c.json({ error: 'Invalid slug characters' }, 400);
+        }
+        // Reserved slugs
+        if (finalSlug === 'a' || finalSlug === 'c') {
+            return c.json({ error: 'Reserved slug' }, 400);
         }
     }
 
