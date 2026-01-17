@@ -172,7 +172,7 @@ export const adminPage = `<!DOCTYPE html>
                 </div>
                 <div>
                     <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Slug (Optional)</label>
-                    <input type="text" name="slug" minlength="3" placeholder="custom-slug" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
+                    <input type="text" name="slug" placeholder="custom-slug" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
                 </div>
                 <div>
                     <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Expires At</label>
