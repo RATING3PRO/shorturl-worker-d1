@@ -177,7 +177,7 @@ app.post('/api/create', async (c) => {
 
     await c.env.DB.prepare(
         'INSERT INTO links (slug, url, created_at, expires_at, status, interstitial, visit_count, creator_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(finalSlug, url, now, expiresAt, 'active', 0, 0, ip).run();
+    ).bind(finalSlug, url, now, expiresAt, 'active', 1, 0, ip).run();
 
     // TG Notify
     c.executionCtx.waitUntil((async () => {
