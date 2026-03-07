@@ -1,7 +1,7 @@
 
 import { Hono } from 'hono';
-import { sign, verify } from 'hono/jwt';
-import { authenticator } from 'otplib';
+import { sign, verify as verifyJwt } from 'hono/jwt';
+import { generateSecret, generateURI, verify } from 'otplib';
 import { adminPage, publicPage, interstitialPage, maintenancePage } from './html';
 
 type Bindings = {
@@ -209,8 +209,8 @@ app.post('/api/admin/login', async (c) => {
             return c.json({ error: '2fa_required' }, 401);
         }
         try {
-            const isValid = authenticator.check(code, conf.admin_2fa_secret || '');
-            if (!isValid) {
+            const isValid = await verify({ token: code, secret: conf.admin_2fa_secret || '' });
+            if (!isValid?.valid) {
                 return c.json({ error: 'Invalid 2FA code' }, 401);
             }
         } catch (e) {
@@ -249,7 +249,7 @@ app.use('/api/admin/*', async (c, next) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.split(' ')[1];
         try {
-            await verify(token, c.env.ADMIN_PASSWORD);
+            await verifyJwt(token, c.env.ADMIN_PASSWORD, 'HS256');
             await next();
             return;
         } catch (e) {
@@ -273,8 +273,12 @@ app.use('/api/admin/*', async (c, next) => {
 
 // API: 2FA Setup - Generate Secret
 app.post('/api/admin/2fa/setup', async (c) => {
-    const secret = authenticator.generateSecret();
-    const otpauth = authenticator.keyuri('admin', 'ShortURL', secret);
+    const secret = generateSecret();
+    const otpauth = generateURI({
+        issuer: 'ShortURL',
+        label: 'admin',
+        secret
+    });
     return c.json({ secret, otpauth });
 });
 
@@ -284,8 +288,8 @@ app.post('/api/admin/2fa/enable', async (c) => {
     
     if (!secret || !code) return c.json({ error: 'Missing secret or code' }, 400);
 
-    const isValid = authenticator.check(code, secret);
-    if (!isValid) return c.json({ error: 'Invalid code' }, 400);
+    const isValid = await verify({ token: code, secret });
+    if (!isValid?.valid) return c.json({ error: 'Invalid code' }, 400);
 
     await c.env.DB.prepare('UPDATE config SET admin_2fa_secret = ?, admin_2fa_enabled = 1 WHERE id = 1')
         .bind(secret).run();
