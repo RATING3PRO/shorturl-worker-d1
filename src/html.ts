@@ -323,12 +323,6 @@ export const adminPage = `<!DOCTYPE html>
             });
             
             if (res.status === 401) {
-                try {
-                    const err = await res.json();
-                    console.error('API Unauthorized:', err);
-                    alert('Session Error: ' + (err.details || err.error));
-                } catch(e) {}
-                
                 logout();
                 throw new Error('Unauthorized');
             }

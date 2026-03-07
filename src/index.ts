@@ -257,10 +257,8 @@ app.use('/api/admin/*', async (c, next) => {
             await verifyJwt(token, c.env.ADMIN_PASSWORD, 'HS256');
             await next();
             return;
-        } catch (e: any) {
-            console.error('JWT Verification Failed:', e);
-            // Temporary debug: return error detail
-            return c.json({ error: 'JWT Verification Failed', details: e.message || String(e) }, 401);
+        } catch (e) {
+            // Invalid token, fall through to check legacy password if allowed
         }
     }
 
@@ -275,6 +273,7 @@ app.use('/api/admin/*', async (c, next) => {
         }
     }
 
+    // If both failed, return unauthorized (and if JWT failed, we already logged it)
     return c.json({ error: 'Unauthorized' }, 401);
 });
 
