@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS config (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     tg_notify_create INTEGER DEFAULT 0,
     tg_notify_login INTEGER DEFAULT 0,
-    tg_notify_update INTEGER DEFAULT 0
+    tg_notify_update INTEGER DEFAULT 0,
+    admin_2fa_secret TEXT,
+    admin_2fa_enabled INTEGER DEFAULT 0
 );
 INSERT OR IGNORE INTO config (id, tg_notify_create, tg_notify_login, tg_notify_update) VALUES (1, 0, 0, 0);

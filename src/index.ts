@@ -1,5 +1,7 @@
 
 import { Hono } from 'hono';
+import { sign, verify } from 'hono/jwt';
+import { authenticator } from 'otplib';
 import { adminPage, publicPage, interstitialPage, maintenancePage } from './html';
 
 type Bindings = {
@@ -28,6 +30,8 @@ type Config = {
     tg_notify_create: number; // 0 or 1
     tg_notify_login: number;
     tg_notify_update: number;
+    admin_2fa_secret?: string;
+    admin_2fa_enabled?: number; // 0 or 1
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -35,7 +39,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 // Security Middleware
 app.use('*', async (c, next) => {
     await next();
-    c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; frame-src https://challenges.cloudflare.com;");
+    c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://api.qrserver.com; style-src 'self' 'unsafe-inline'; frame-src https://challenges.cloudflare.com; img-src 'self' data: https://api.qrserver.com;");
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('X-Frame-Options', 'DENY');
     c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -74,7 +78,7 @@ async function getConfig(db: D1Database): Promise<Config> {
         if (row) return row;
     } catch {}
     
-    return { tg_notify_create: 0, tg_notify_login: 0, tg_notify_update: 0 };
+    return { tg_notify_create: 0, tg_notify_login: 0, tg_notify_update: 0, admin_2fa_enabled: 0 };
 }
 
 // Helper: Turnstile Validation
@@ -190,13 +194,115 @@ app.post('/api/create', async (c) => {
     return c.json({ success: true, slug: finalSlug });
 });
 
-// Middleware for Admin API
-app.use('/api/admin/*', async (c, next) => {
-    const auth = c.req.header('x-admin-auth');
-    if (auth !== c.env.ADMIN_PASSWORD) {
+// Admin Login
+app.post('/api/admin/login', async (c) => {
+    const { password, code } = await c.req.json();
+    if (password !== c.env.ADMIN_PASSWORD) {
         return c.json({ error: 'Unauthorized' }, 401);
     }
-    await next();
+
+    const conf = await getConfig(c.env.DB);
+    
+    // If 2FA enabled, check code
+    if (conf.admin_2fa_enabled) {
+        if (!code) {
+            return c.json({ error: '2fa_required' }, 401);
+        }
+        try {
+            const isValid = authenticator.check(code, conf.admin_2fa_secret || '');
+            if (!isValid) {
+                return c.json({ error: 'Invalid 2FA code' }, 401);
+            }
+        } catch (e) {
+            return c.json({ error: 'Invalid 2FA code' }, 401);
+        }
+    }
+
+    // Generate JWT
+    const payload = {
+        role: 'admin',
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+    };
+    const token = await sign(payload, c.env.ADMIN_PASSWORD);
+
+    // Notify login
+    c.executionCtx.waitUntil((async () => {
+        if (conf.tg_notify_login) {
+            const ip = c.req.header('CF-Connecting-IP') || 'unknown';
+            await sendTgMessage(c.env, `<b>Admin Login</b>\nIP: ${ip}\n2FA: ${conf.admin_2fa_enabled ? 'Yes' : 'No'}`);
+        }
+    })());
+
+    return c.json({ token });
+});
+
+// Middleware for Admin API
+app.use('/api/admin/*', async (c, next) => {
+    // Skip login route
+    if (c.req.path === '/api/admin/login') {
+        await next();
+        return;
+    }
+
+    // Check JWT
+    const authHeader = c.req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        try {
+            await verify(token, c.env.ADMIN_PASSWORD);
+            await next();
+            return;
+        } catch (e) {
+            // Invalid token, fall through to check legacy password if allowed
+        }
+    }
+
+    // Check Legacy Password (x-admin-auth)
+    // ONLY allowed if 2FA is DISABLED
+    const auth = c.req.header('x-admin-auth');
+    if (auth === c.env.ADMIN_PASSWORD) {
+        const conf = await getConfig(c.env.DB);
+        if (!conf.admin_2fa_enabled) {
+            await next();
+            return;
+        }
+    }
+
+    return c.json({ error: 'Unauthorized' }, 401);
+});
+
+// API: 2FA Setup - Generate Secret
+app.post('/api/admin/2fa/setup', async (c) => {
+    const secret = authenticator.generateSecret();
+    const otpauth = authenticator.keyuri('admin', 'ShortURL', secret);
+    return c.json({ secret, otpauth });
+});
+
+// API: 2FA Enable
+app.post('/api/admin/2fa/enable', async (c) => {
+    const { secret, code } = await c.req.json();
+    
+    if (!secret || !code) return c.json({ error: 'Missing secret or code' }, 400);
+
+    const isValid = authenticator.check(code, secret);
+    if (!isValid) return c.json({ error: 'Invalid code' }, 400);
+
+    await c.env.DB.prepare('UPDATE config SET admin_2fa_secret = ?, admin_2fa_enabled = 1 WHERE id = 1')
+        .bind(secret).run();
+    
+    return c.json({ success: true });
+});
+
+// API: 2FA Disable
+app.post('/api/admin/2fa/disable', async (c) => {
+    const { password } = await c.req.json();
+    // Extra safety: require password again to disable
+    if (password !== c.env.ADMIN_PASSWORD) {
+        return c.json({ error: 'Invalid password' }, 401);
+    }
+
+    await c.env.DB.prepare('UPDATE config SET admin_2fa_enabled = 0 WHERE id = 1').run();
+    return c.json({ success: true });
 });
 
 // API: Get Config

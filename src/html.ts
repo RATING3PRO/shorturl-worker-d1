@@ -104,10 +104,14 @@ export const adminPage = `<!DOCTYPE html>
         button:hover { background: #f4f4f5; }
         .btn-delete { color: #dc2626; border-color: #fca5a5; }
         .btn-delete:hover { background: #fef2f2; }
-        input[type="password"] { padding: 0.5rem; border: 1px solid #d4d4d8; border-radius: 0.25rem; }
+        input[type="password"], input[type="text"], input[type="url"], input[type="datetime-local"] { padding: 0.5rem; border: 1px solid #d4d4d8; border-radius: 0.25rem; }
         #login-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; }
         .login-box { background: white; padding: 2rem; border-radius: 0.5rem; width: 300px; }
         .controls { display: flex; gap: 0.5rem; align-items: center; }
+        .btn-primary { background: #000; color: white; border: none; }
+        .btn-primary:hover { background: #27272a; }
+        .qr-code { text-align: center; margin: 1rem 0; }
+        .qr-code img { max-width: 150px; }
     </style>
 </head>
 <body>
@@ -119,7 +123,12 @@ export const adminPage = `<!DOCTYPE html>
                     <label>Password</label>
                     <input type="password" id="password" required style="width: 100%; box-sizing: border-box;">
                 </div>
-                <button type="submit" style="width: 100%; background: #000; color: white;">Login</button>
+                <div id="2fa-group" style="margin-bottom: 1rem; display: none;">
+                    <label>2FA Code</label>
+                    <input type="text" id="2fa_code" style="width: 100%; box-sizing: border-box;" placeholder="123456" pattern="[0-9]*">
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%;">Login</button>
+                <div id="login-error" style="color: red; margin-top: 0.5rem; display: none;"></div>
             </form>
         </div>
     </div>
@@ -135,6 +144,13 @@ export const adminPage = `<!DOCTYPE html>
         
         <!-- Settings Modal/Section -->
         <div id="settings-panel" style="display: none; margin-bottom: 1.5rem; padding: 1rem; background: #fff; border: 1px solid #e4e4e7; border-radius: 0.5rem;">
+            <h3 style="margin-top: 0;">2FA Settings</h3>
+            <div id="2fa-status-section">
+                <!-- Content populated by JS -->
+            </div>
+            
+            <hr style="margin: 1rem 0; border: 0; border-top: 1px solid #e4e4e7;">
+
             <h3 style="margin-top: 0;">Telegram Notifications</h3>
             <div id="tg-not-configured" style="display: none; color: #d97706; margin-bottom: 1rem;">
                 ⚠️ Telegram Bot Token or Chat ID not configured in Secrets.
@@ -156,7 +172,7 @@ export const adminPage = `<!DOCTYPE html>
                     </label>
                 </div>
                 <div style="margin-top: 1rem;">
-                    <button onclick="saveConfig()" style="background: #000; color: white;">Save Settings</button>
+                    <button onclick="saveConfig()" class="btn-primary">Save TG Settings</button>
                     <button onclick="testTg()">Send Test Message</button>
                 </div>
             </div>
@@ -178,7 +194,7 @@ export const adminPage = `<!DOCTYPE html>
                     <label style="display: block; margin-bottom: 0.25rem; font-size: 0.875rem;">Expires At</label>
                     <input type="datetime-local" name="expires" style="width: 100%; padding: 0.5rem; box-sizing: border-box;">
                 </div>
-                <button type="submit" style="background: #000; color: white; padding: 0.5rem 1rem; height: 38px;">Create</button>
+                <button type="submit" class="btn-primary" style="padding: 0.5rem 1rem; height: 38px;">Create</button>
             </form>
         </div>
 
@@ -228,13 +244,39 @@ export const adminPage = `<!DOCTYPE html>
             loadConfig();
         }
 
-        document.getElementById('loginForm').addEventListener('submit', (e) => {
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            token = document.getElementById('password').value;
-            localStorage.setItem('admin_token', token);
-            document.getElementById('login-overlay').style.display = 'none';
-            loadLinks();
-            loadConfig();
+            const password = document.getElementById('password').value;
+            const code = document.getElementById('2fa_code').value;
+            const errorDiv = document.getElementById('login-error');
+            errorDiv.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, code })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.token) {
+                    token = data.token;
+                    localStorage.setItem('admin_token', token);
+                    document.getElementById('login-overlay').style.display = 'none';
+                    loadLinks();
+                    loadConfig();
+                } else if (res.status === 401 && data.error === '2fa_required') {
+                    document.getElementById('2fa-group').style.display = 'block';
+                    errorDiv.textContent = 'Please enter 2FA code';
+                    errorDiv.style.display = 'block';
+                } else {
+                    throw new Error(data.error || 'Login failed');
+                }
+            } catch (err) {
+                errorDiv.textContent = err.message;
+                errorDiv.style.display = 'block';
+            }
         });
         
         document.getElementById('adminCreateForm').addEventListener('submit', async (e) => {
@@ -267,7 +309,11 @@ export const adminPage = `<!DOCTYPE html>
         }
 
         async function apiCall(endpoint, method = 'GET', body = null) {
-            const headers = { 'x-admin-auth': token };
+            const headers = {};
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            // Fallback for legacy (though new system uses JWT)
+            // headers['x-admin-auth'] = token; 
+            
             if (body) headers['Content-Type'] = 'application/json';
             
             const res = await fetch(endpoint, {
@@ -286,6 +332,8 @@ export const adminPage = `<!DOCTYPE html>
         async function loadConfig() {
             try {
                 const conf = await apiCall('/api/admin/config');
+                
+                // TG Config
                 if (conf.has_tg) {
                     document.getElementById('tg-configured').style.display = 'block';
                     document.getElementById('tg_create').checked = !!conf.tg_notify_create;
@@ -294,8 +342,95 @@ export const adminPage = `<!DOCTYPE html>
                 } else {
                     document.getElementById('tg-not-configured').style.display = 'block';
                 }
+
+                // 2FA Config
+                render2FASection(conf.admin_2fa_enabled);
+
             } catch (e) {
                 console.error('Failed to load config', e);
+            }
+        }
+
+        function render2FASection(enabled) {
+            const container = document.getElementById('2fa-status-section');
+            if (enabled) {
+                container.innerHTML = \`
+                    <div style="color: #059669; font-weight: bold; margin-bottom: 0.5rem;">✅ Two-Factor Authentication is ENABLED</div>
+                    <button onclick="disable2FA()" class="btn-delete">Disable 2FA</button>
+                \`;
+            } else {
+                container.innerHTML = \`
+                    <div style="color: #6b7280; margin-bottom: 0.5rem;">Two-Factor Authentication is DISABLED</div>
+                    <button onclick="setup2FA()" class="btn-primary">Enable 2FA</button>
+                    <div id="2fa-setup-area" style="display:none; margin-top: 1rem; border-top: 1px dashed #ccc; padding-top: 1rem;"></div>
+                \`;
+            }
+        }
+
+        async function setup2FA() {
+            try {
+                const res = await apiCall('/api/admin/2fa/setup', 'POST');
+                const area = document.getElementById('2fa-setup-area');
+                area.style.display = 'block';
+                area.innerHTML = \`
+                    <p>1. Scan this QR code with Google Authenticator:</p>
+                    <div class="qr-code">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=\${encodeURIComponent(res.otpauth)}" />
+                    </div>
+                    <div style="margin: 1rem 0; padding: 0.5rem; background: #f3f4f6; border-radius: 4px; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <span style="font-size: 0.8rem; color: #6b7280; display: block;">Manual Entry Key:</span>
+                            <code id="secret-code" style="font-size: 1rem; font-weight: bold;">\${res.secret}</code>
+                        </div>
+                        <button onclick="copySecret()" style="background: white; border: 1px solid #d1d5db; padding: 0.25rem 0.5rem; font-size: 0.8rem;">Copy</button>
+                    </div>
+                    <p>2. Enter the code to verify:</p>
+                    <input type="text" id="verify_code" placeholder="123456" style="width: 150px;">
+                    <button onclick="enable2FA('\${res.secret}')" class="btn-primary">Verify & Enable</button>
+                \`;
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        function copySecret() {
+            const secret = document.getElementById('secret-code').innerText;
+            navigator.clipboard.writeText(secret).then(() => {
+                alert('Secret copied to clipboard!');
+            });
+        }
+
+        async function enable2FA(secret) {
+            const code = document.getElementById('verify_code').value;
+            if (!code) return alert('Please enter code');
+            
+            try {
+                const res = await apiCall('/api/admin/2fa/enable', 'POST', { secret, code });
+                if (res.success) {
+                    alert('2FA Enabled Successfully!');
+                    loadConfig();
+                } else {
+                    alert('Error: ' + res.error);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function disable2FA() {
+            const password = prompt("Enter admin password to disable 2FA:");
+            if (!password) return;
+
+            try {
+                const res = await apiCall('/api/admin/2fa/disable', 'POST', { password });
+                if (res.success) {
+                    alert('2FA Disabled.');
+                    loadConfig();
+                } else {
+                    alert('Error: ' + res.error);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
             }
         }
 
