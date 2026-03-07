@@ -228,7 +228,7 @@ app.post('/api/admin/login', async (c) => {
         role: 'admin',
         exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
     };
-    const token = await sign(payload, c.env.ADMIN_PASSWORD);
+    const token = await sign(payload, c.env.ADMIN_PASSWORD, 'HS256');
 
     // Notify login
     c.executionCtx.waitUntil((async () => {
