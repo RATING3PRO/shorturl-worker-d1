@@ -257,8 +257,10 @@ app.use('/api/admin/*', async (c, next) => {
             await verifyJwt(token, c.env.ADMIN_PASSWORD, 'HS256');
             await next();
             return;
-        } catch (e) {
-            // Invalid token, fall through to check legacy password if allowed
+        } catch (e: any) {
+            console.error('JWT Verification Failed:', e);
+            // Temporary debug: return error detail
+            return c.json({ error: 'JWT Verification Failed', details: e.message || String(e) }, 401);
         }
     }
 
