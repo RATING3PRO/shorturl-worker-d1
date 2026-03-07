@@ -36,6 +36,11 @@ type Config = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+app.onError((err, c) => {
+    console.error(err);
+    return c.json({ error: err.message, stack: err.stack }, 500);
+});
+
 // Security Middleware
 app.use('*', async (c, next) => {
     await next();
@@ -288,8 +293,12 @@ app.post('/api/admin/2fa/enable', async (c) => {
     
     if (!secret || !code) return c.json({ error: 'Missing secret or code' }, 400);
 
-    const isValid = await verify({ token: code, secret });
-    if (!isValid?.valid) return c.json({ error: 'Invalid code' }, 400);
+    try {
+        const isValid = await verify({ token: code, secret });
+        if (!isValid?.valid) return c.json({ error: 'Invalid code' }, 400);
+    } catch (e) {
+        return c.json({ error: 'Invalid code or secret' }, 400);
+    }
 
     await c.env.DB.prepare('UPDATE config SET admin_2fa_secret = ?, admin_2fa_enabled = 1 WHERE id = 1')
         .bind(secret).run();

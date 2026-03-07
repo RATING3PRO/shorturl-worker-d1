@@ -2,6 +2,7 @@ name = "shorturl-worker-d1"
 main = "src/index.ts"
 compatibility_date = "2025-01-09"
 compatibility_flags = [ "nodejs_compat" ]
+keep_vars = true
 
 # Variables
 # Please configure these in Cloudflare Dashboard -> Settings -> Variables
