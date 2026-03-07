@@ -12,6 +12,7 @@ A serverless URL shortener built with Cloudflare Workers, Hono, and D1 Database.
 - **Security**: 
   - Cloudflare Turnstile integration for public creation.
   - Password-protected admin API.
+  - 2FA (Two-Factor Authentication) for admin access.
 - **Notifications**: Telegram Bot notifications for:
   - New link creation.
   - Admin login.
