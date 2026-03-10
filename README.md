@@ -1,5 +1,7 @@
 # Cloudflare Worker Short URL Service
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/RATING3PRO/shorturl-worker-d1)
+
 A serverless URL shortener built with Cloudflare Workers, Hono, and D1 Database.
 
 ## Features
