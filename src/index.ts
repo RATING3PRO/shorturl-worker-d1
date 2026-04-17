@@ -50,16 +50,17 @@ app.use('*', async (c, next) => {
     c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
 });
 
+// Helper: Escape HTML for Telegram
+function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // Helper: Telegram Notification
-async function sendTgMessage(env: Bindings, text: string) {
-    if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) return;
-    
-    // Check user config settings from DB
-    // Optimization: We could cache this, but for now we'll query DB or pass flags
-    // Actually, let's keep it simple: caller decides if they should send based on config
+async function sendTgMessage(env: Bindings, text: string): Promise<boolean> {
+    if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) return false;
     
     try {
-        await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+        const resp = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -68,8 +69,15 @@ async function sendTgMessage(env: Bindings, text: string) {
                 parse_mode: 'HTML'
             })
         });
+        if (!resp.ok) {
+            const body = await resp.text();
+            console.error('TG API error', resp.status, body);
+            return false;
+        }
+        return true;
     } catch (e) {
         console.error('Failed to send TG message', e);
+        return false;
     }
 }
 
@@ -192,7 +200,7 @@ app.post('/api/create', async (c) => {
     c.executionCtx.waitUntil((async () => {
         const conf = await getConfig(c.env.DB);
         if (conf.tg_notify_create) {
-            await sendTgMessage(c.env, `<b>New Link Created</b>\nSlug: <code>${finalSlug}</code>\nURL: ${url}\nIP: ${ip}`);
+            await sendTgMessage(c.env, `<b>New Link Created</b>\nSlug: <code>${escapeHtml(finalSlug)}</code>\nURL: ${escapeHtml(url)}\nIP: ${escapeHtml(ip)}`);
         }
     })());
 
@@ -347,7 +355,8 @@ app.post('/api/admin/test-tg', async (c) => {
     if (!c.env.TG_BOT_TOKEN || !c.env.TG_CHAT_ID) {
         return c.json({ error: 'Telegram secrets not configured' }, 400);
     }
-    await sendTgMessage(c.env, '<b>Test Message</b>\nThis is a test notification from your Short URL Worker.');
+    const ok = await sendTgMessage(c.env, '<b>Test Message</b>\nThis is a test notification from your Short URL Worker.');
+    if (!ok) return c.json({ error: 'Failed to send Telegram message' }, 502);
     return c.json({ success: true });
 });
 
@@ -419,7 +428,7 @@ app.post('/api/admin/create', async (c) => {
     c.executionCtx.waitUntil((async () => {
         const conf = await getConfig(c.env.DB);
         if (conf.tg_notify_create) {
-            await sendTgMessage(c.env, `<b>Admin Link Created</b>\nSlug: <code>${finalSlug}</code>\nURL: ${url}`);
+            await sendTgMessage(c.env, `<b>Admin Link Created</b>\nSlug: <code>${escapeHtml(finalSlug)}</code>\nURL: ${escapeHtml(url)}`);
         }
     })());
 
@@ -465,7 +474,7 @@ app.post('/api/admin/update', async (c) => {
         c.executionCtx.waitUntil((async () => {
             const conf = await getConfig(c.env.DB);
             if (conf.tg_notify_update) {
-                await sendTgMessage(c.env, `<b>Link Updated</b>\nSlug: <code>${slug}</code>\n${changes.join('\n')}`);
+                await sendTgMessage(c.env, `<b>Link Updated</b>\nSlug: <code>${escapeHtml(slug)}</code>\n${changes.join('\n')}`);
             }
         })());
     }
