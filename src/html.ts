@@ -137,7 +137,7 @@ export const adminPage = `<!DOCTYPE html>
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h1>Link Management</h1>
             <div>
-                <button onclick="toggleSettings()">⚙️ Settings</button>
+                <button onclick="toggleSettings()">Settings</button>
                 <button onclick="logout()">Logout</button>
             </div>
         </div>
@@ -153,7 +153,7 @@ export const adminPage = `<!DOCTYPE html>
 
             <h3 style="margin-top: 0;">Telegram Notifications</h3>
             <div id="tg-not-configured" style="display: none; color: #d97706; margin-bottom: 1rem;">
-                ⚠️ Telegram Bot Token or Chat ID not configured in Secrets.
+                Telegram Bot Token or Chat ID not configured in Secrets.
             </div>
             <div id="tg-configured" style="display: none;">
                 <div style="margin-bottom: 0.5rem;">
@@ -355,7 +355,7 @@ export const adminPage = `<!DOCTYPE html>
             const container = document.getElementById('2fa-status-section');
             if (enabled) {
                 container.innerHTML = \`
-                    <div style="color: #059669; font-weight: bold; margin-bottom: 0.5rem;">✅ Two-Factor Authentication is ENABLED</div>
+                    <div style="color: #059669; font-weight: bold; margin-bottom: 0.5rem;">Two-Factor Authentication is ENABLED</div>
                     <button onclick="disable2FA()" class="btn-delete">Disable 2FA</button>
                 \`;
             } else {
